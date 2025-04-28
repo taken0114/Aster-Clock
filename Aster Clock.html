@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Aster Clock</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #222; /* 背景色を濃い灰色に変更 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #clockCanvas {
+            /* JavaScriptでサイズを設定 */
+        }
+
+        #pipCanvas, #pipVideo {
+            display: none; /* PiP関連要素を非表示 */
+        }
+
+        #pipButton {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 8px;
+            background-color: rgb(42, 40, 60);
+            border: 2px solid white; /* 白い縁を追加 */
+            cursor: pointer;
+            color: #fff;
+            font-weight: bold;
+        }
+
+        #pipButton:hover {
+            background-color: #524f70;
+        }
+    </style>
+</head>
+<body>
+    <button id="pipButton">PiPで時計を表示</button>
+    <canvas id="clockCanvas" width="800" height="800"></canvas>
+    <canvas id="pipCanvas" width="400" height="400"></canvas>
+    <video id="pipVideo" autoplay muted playsinline></video>
+
+    <script>
+        'use strict';
+
+        // メインの時計 Canvas とコンテキスト
+        const clockCanvas = document.getElementById('clockCanvas');
+        const clockContext = clockCanvas.getContext('2d');
+        const clockRadius = clockCanvas.width / 2;
+        clockContext.translate(clockRadius, clockRadius); // 原点を中心に移動
+
+        // PiP 用の Canvas とコンテキスト
+        const pipCanvas = document.getElementById('pipCanvas');
+        const pipContext = pipCanvas.getContext('2d');
+        const pipRadius = pipCanvas.width / 2; // 変更後の width (400) に基づいて pipRadius を計算
+        pipContext.translate(pipRadius, pipRadius); // 原点を中心に移動
+
+        // PiP ボタンとビデオ要素
+        const pipButton = document.getElementById('pipButton');
+        const pipVideo = document.getElementById('pipVideo');
+
+        /**
+         * 時計の文字盤を描画する関数
+         * @param {CanvasRenderingContext2D} context - 描画コンテキスト
+         * @param {number} radius - 時計の半径
+         * @param {number} moonRadiusRatio - 三日月メイン円の半径比率
+         * @param {number} moonOffsetXRatio - 三日月中心X軸オフセット比率
+         * @param {number} moonOffsetYRatio - 三日月中心Y軸オフセット比率
+         * @param {string} moonStrokeColor - 三日月の枠線色
+         * @param {number} moonStrokeWidthRatio - 三日月の枠線太さ比率
+         * @param {number} moonOverlapRadiusRatio - 三日月重なり隠し円の半径比率
+         * @param {string} moonOverlapColor - 三日月重なり隠し円の色
+         */
+        const drawFace = (context, radius,
+                                    moonRadiusRatio = 0.13,
+                                    moonOffsetXRatio = 0,
+                                    moonOffsetYRatio = -0.35,
+                                    moonStrokeColor = 'black',
+                                    moonStrokeWidthRatio = 0.01,
+                                    moonOverlapRadiusRatio = 0.095,
+                                    moonOverlapColor = 'white') => {
+            const faceRadius = radius * 0.95;
+            const borderLineWidth = radius * 0.08;
+            const halfCircleRadiusRatio = 0.78;
+            const innerWhiteCircleRadiusRatio = halfCircleRadiusRatio * 0.985;
+
+            // 白い背景の円
+            context.beginPath();
+            context.arc(0, 0, faceRadius, 0, 2 * Math.PI);
+            context.fillStyle = 'white';
+            context.fill();
+            context.lineWidth = borderLineWidth;
+            context.strokeStyle = 'gray';
+            context.stroke();
+
+            // 半分黒い円
+            const halfCircleRadius = radius * halfCircleRadiusRatio;
+            context.beginPath();
+            context.arc(0, 0, halfCircleRadius, 0, Math.PI);
+            context.fillStyle = 'white';
+            context.fill();
+            context.beginPath();
+            context.arc(0, 0, halfCircleRadius, Math.PI, 2 * Math.PI);
+            context.fillStyle = 'black';
+            context.fill();
+
+            // 内側の白い円
+            const innerWhiteCircleRadius = radius * innerWhiteCircleRadiusRatio;
+            context.beginPath();
+            context.arc(0, 0, innerWhiteCircleRadius, 0, 2 * Math.PI);
+            context.fillStyle = 'white';
+            context.fill();
+
+            // 三日月マークの描画
+            const mainMoonRadius = radius * moonRadiusRatio;
+            const offsetX = radius * moonOffsetXRatio;
+            const offsetY = radius * moonOffsetYRatio;
+            const strokeWidth = radius * moonStrokeWidthRatio;
+            const overlapRadius = radius * moonOverlapRadiusRatio;
+            const secondaryMoonRadius = mainMoonRadius * 0.65;
+            const secondaryOffsetX = offsetX - mainMoonRadius * 0.35;
+            const secondaryOffsetY = offsetY - mainMoonRadius * 0.35;
+
+            // メインの黒い枠の円 (三日月の一部)
+            context.beginPath();
+            context.arc(offsetX, offsetY, mainMoonRadius, 0, 2 * Math.PI);
+            context.strokeStyle = moonStrokeColor;
+            context.lineWidth = strokeWidth;
+            context.stroke();
+
+            // 左上の小さい黒い枠の円 (三日月の一部)
+            context.beginPath();
+            context.arc(secondaryOffsetX, secondaryOffsetY, secondaryMoonRadius, 0, 2 * Math.PI);
+            context.strokeStyle = moonStrokeColor;
+            context.lineWidth = strokeWidth;
+            context.stroke();
+
+            // 重なりを隠す白い円
+            context.beginPath();
+            context.arc(offsetX - mainMoonRadius * 0.85, offsetY - mainMoonRadius * 0.85, overlapRadius, 0, 2 * Math.PI);
+            context.fillStyle = moonOverlapColor;
+            context.fill();
+        };
+
+        /**
+         * 時計の数字 (点) を描画する関数
+         * @param {CanvasRenderingContext2D} context - 描画コンテキスト
+         * @param {number} radius - 時計の半径
+         */
+        const drawNumbers = (context, radius) => {
+            const dotRadiusRatio = 0.023;
+            const numberCount = 24;
+            const numberDistanceFromCenterRatio = 0.85;
+            const dotRadius = radius * dotRadiusRatio;
+            context.fillStyle = 'black';
+
+            for (let num = 1; num <= numberCount; num++) {
+                const angle = (num / numberCount) * 2 * Math.PI;
+                context.rotate(angle);
+                context.translate(0, -radius * numberDistanceFromCenterRatio);
+                context.rotate(-angle);
+                context.beginPath();
+                context.arc(0, 0, dotRadius, 0, 2 * Math.PI);
+                context.fill();
+                context.rotate(angle);
+                context.translate(0, radius * numberDistanceFromCenterRatio);
+                context.rotate(-angle);
+            }
+        };
+
+        /**
+         * 時計の針を描画する関数
+         * @param {CanvasRenderingContext2D} context - 描画コンテキスト
+         * @param {number} angle - 針の角度 (ラジアン)
+         * @param {number} length - 針の長さ
+         * @param {number} baseWidth - 針の根元の太さ
+         * @param {number} tipWidth - 針の先端の太さ
+         * @param {string} color - 針の色
+         * @param {number} backRatio - 中心から反対側への伸びる比率
+         * @param {boolean} isSecond - 秒針かどうか
+         */
+        const drawHand = (context, angle, length, baseWidth, tipWidth, color, backRatio = 0, isSecond = false) => {
+            context.lineCap = 'butt';
+            context.fillStyle = color;
+            context.rotate(angle);
+
+            context.beginPath();
+            context.moveTo(-baseWidth / 2, length * backRatio);
+            context.lineTo(-tipWidth / 2, -length * (isSecond ? 0.8 : 1));
+            context.lineTo(tipWidth / 2, -length * (isSecond ? 0.8 : 1));
+            context.lineTo(baseWidth / 2, length * backRatio);
+            context.closePath();
+            context.fill();
+
+            context.rotate(-angle);
+        };
+
+        /**
+         * 時計全体を描画する関数
+         * @param {CanvasRenderingContext2D} context - 描画コンテキスト
+         * @param {number} radius - 時計の半径
+         */
+        const drawClock = (context, radius) => {
+            context.clearRect(-radius, -radius, radius * 2, radius * 2);
+            drawFace(context, radius);
+            drawNumbers(context, radius);
+
+            const now = new Date();
+            const hour = now.getHours() % 24;
+            const minute = now.getMinutes();
+            const second = now.getSeconds();
+            const millisecond = now.getMilliseconds();
+
+            // 針の角度を計算
+            const hourAngle = (hour / 24 + minute / (24 * 60) + second / (24 * 60 * 60) + millisecond / (24 * 60 * 60 * 1000)) * 2 * Math.PI;
+            const minuteAngle = (minute / 60 + second / (60 * 60) + millisecond / (60 * 60 * 1000)) * 2 * Math.PI;
+            const secondAngle = (second / 60 + millisecond / (60 * 1000)) * 2 * Math.PI;
+
+            // 各針を描画
+            drawHand(context, hourAngle, radius * 0.45, radius * 0.04 * 1.5, radius * 0.02 * 1.2, 'black', 0.1); // 時針
+            drawHand(context, minuteAngle, radius * 0.7, radius * 0.03 * 1.5, radius * 0.02 * .8, 'black', 0.12); // 分針
+            drawHand(context, secondAngle, radius * 1.1, radius * 0.003 * 8, radius * 0.001 * 8, 'silver', 0.15, true); // 秒針
+        };
+
+        // 時計を更新する関数 (メインと PiP の両方)
+        const updateClocks = () => {
+            drawClock(clockContext, clockRadius);
+            drawClock(pipContext, pipRadius);
+        };
+
+        // 50ミリ秒ごとに時計を更新
+        setInterval(updateClocks, 50);
+        updateClocks(); // 初回描画
+
+        // PiP ボタンのイベントリスナー
+        pipButton.addEventListener('click', async () => {
+            try {
+                pipVideo.srcObject = pipCanvas.captureStream(30); // フレームレートは一旦そのまま
+                await pipVideo.play();
+                await pipVideo.requestPictureInPicture();
+
+                pipVideo.onleavepictureinpicture = () => {
+                    if (pipVideo.srcObject) {
+                        pipVideo.srcObject.getTracks().forEach(track => track.stop());
+                        pipVideo.srcObject = null;
+                    }
+                };
+            } catch (error) {
+                alert('PiPの起動に失敗しました：' + error.message);
+                console.error('PiP起動エラー:', error);
+            }
+        });
+    </script>
+</body>
+</html>
