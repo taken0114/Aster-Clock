@@ -242,7 +242,52 @@
         // PiP ボタンのイベントリスナー
         pipButton.addEventListener('click', async () => {
             try {
-                pipVideo.srcObject = pipCanvas.captureStream(30); // フレームレートは一旦そのまま
+                // Document Picture-in-Picture API が使える場合は、
+                // 時計専用の小さなドキュメントウィンドウを開く。
+                if ('documentPictureInPicture' in window) {
+                    const pipWindow = await documentPictureInPicture.requestWindow({
+                        width: 180,
+                        height: 180
+                    });
+
+                    // PiP側は時計だけを全面表示
+                    pipWindow.document.body.style.margin = '0';
+                    pipWindow.document.body.style.backgroundColor = '#222';
+                    pipWindow.document.body.style.width = '100vw';
+                    pipWindow.document.body.style.height = '100vh';
+                    pipWindow.document.body.style.overflow = 'hidden';
+                    pipWindow.document.body.style.display = 'flex';
+                    pipWindow.document.body.style.justifyContent = 'center';
+                    pipWindow.document.body.style.alignItems = 'center';
+
+                    const docCanvas = pipWindow.document.createElement('canvas');
+                    docCanvas.width = 400;
+                    docCanvas.height = 400;
+                    docCanvas.style.width = '100%';
+                    docCanvas.style.height = '100%';
+                    docCanvas.style.display = 'block';
+                    pipWindow.document.body.appendChild(docCanvas);
+
+                    const docContext = docCanvas.getContext('2d');
+                    const docRadius = docCanvas.width / 2;
+                    docContext.translate(docRadius, docRadius);
+
+                    const updateDocumentPipClock = () => {
+                        drawClock(docContext, docRadius);
+                    };
+
+                    updateDocumentPipClock();
+                    const documentPipTimer = setInterval(updateDocumentPipClock, 50);
+
+                    pipWindow.addEventListener('pagehide', () => {
+                        clearInterval(documentPipTimer);
+                    }, { once: true });
+
+                    return;
+                }
+
+                // Document PiP 非対応環境では従来の video PiP にフォールバック
+                pipVideo.srcObject = pipCanvas.captureStream(30);
                 await pipVideo.play();
                 await pipVideo.requestPictureInPicture();
 
