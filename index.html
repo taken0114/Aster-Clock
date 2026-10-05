@@ -251,54 +251,53 @@
                     });
 
 
-                    // PiP側は時計だけを全面表示
-                    pipWindow.document.body.style.margin = '0';
-                    pipWindow.document.body.style.backgroundColor = '#222';
-                    pipWindow.document.body.style.width = '100vw';
-                    pipWindow.document.body.style.height = '100vh';
-                    pipWindow.document.body.style.overflow = 'hidden';
-                    pipWindow.document.body.style.display = 'flex';
-                    pipWindow.document.body.style.justifyContent = 'center';
-                    pipWindow.document.body.style.alignItems = 'center';
+                    // PiP側は時計だけを表示。
+                    // ウィンドウの短辺を一辺とする正方形を常に中央配置する。
+                    const pipStyle = pipWindow.document.createElement('style');
+                    pipStyle.textContent = `
+                        html, body {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            width: 100% !important;
+                            height: 100% !important;
+                            overflow: hidden !important;
+                            background: #222 !important;
+                        }
+
+                        #documentPipClock {
+                            position: fixed !important;
+                            left: 50% !important;
+                            top: 50% !important;
+                            width: min(100vw, 100vh) !important;
+                            height: min(100vw, 100vh) !important;
+                            aspect-ratio: 1 / 1 !important;
+                            max-width: none !important;
+                            max-height: none !important;
+                            display: block !important;
+                            transform: translate(-50%, -50%) !important;
+                        }
+                    `;
+                    pipWindow.document.head.appendChild(pipStyle);
 
                     const docCanvas = pipWindow.document.createElement('canvas');
+                    docCanvas.id = 'documentPipClock';
                     docCanvas.width = 400;
                     docCanvas.height = 400;
-                    docCanvas.style.display = 'block';
-                    docCanvas.style.flex = '0 0 auto';
                     pipWindow.document.body.appendChild(docCanvas);
 
                     const docContext = docCanvas.getContext('2d');
                     const docRadius = docCanvas.width / 2;
                     docContext.translate(docRadius, docRadius);
 
-                    // PiPウィンドウの短辺に合わせて、時計表示を常に正方形で中央配置する。
-                    const fitDocumentPipClock = () => {
-                        const size = Math.max(
-                            1,
-                            Math.min(
-                                pipWindow.document.documentElement.clientWidth,
-                                pipWindow.document.documentElement.clientHeight
-                            )
-                        );
-
-                        docCanvas.style.width = size + 'px';
-                        docCanvas.style.height = size + 'px';
-                    };
-
                     const updateDocumentPipClock = () => {
                         drawClock(docContext, docRadius);
                     };
 
-                    fitDocumentPipClock();
                     updateDocumentPipClock();
-
-                    pipWindow.addEventListener('resize', fitDocumentPipClock);
                     const documentPipTimer = setInterval(updateDocumentPipClock, 50);
 
                     pipWindow.addEventListener('pagehide', () => {
                         clearInterval(documentPipTimer);
-                        pipWindow.removeEventListener('resize', fitDocumentPipClock);
                     }, { once: true });
 
                     return;
