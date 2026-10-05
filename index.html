@@ -250,6 +250,14 @@
                         height: 100
                     });
 
+                    // Chrome/OSが許す範囲で、PiPウィンドウ自体も100×100へ寄せる。
+                    // ブラウザ側の最小サイズ制約より小さくはできない。
+                    try {
+                        pipWindow.resizeTo(100, 100);
+                    } catch (error) {
+                        console.debug('PiP window resize was restricted by the browser:', error);
+                    }
+
 
                     // PiP側は時計だけを表示。
                     // ウィンドウの短辺を一辺とする正方形を常に中央配置する。
@@ -268,8 +276,8 @@
                             position: fixed !important;
                             left: 50% !important;
                             top: 50% !important;
-                            width: min(80px, 100vw, 100vh) !important;
-                            height: min(80px, 100vw, 100vh) !important;
+                            width: min(100px, 100vw, 100vh) !important;
+                            height: min(100px, 100vw, 100vh) !important;
                             aspect-ratio: 1 / 1 !important;
                             max-width: none !important;
                             max-height: none !important;
