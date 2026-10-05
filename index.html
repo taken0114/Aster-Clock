@@ -250,29 +250,6 @@
                         height: 100
                     });
 
-                    // ユーザー操作で縦横比が崩れた場合、正方形へ戻す。
-                    // ブラウザ側の最小サイズ制約がある場合は、その最小値までクランプされる。
-                    let isCorrectingPipSize = false;
-                    const keepPipSquare = () => {
-                        if (isCorrectingPipSize) return;
-
-                        const width = pipWindow.outerWidth;
-                        const height = pipWindow.outerHeight;
-                        if (!width || !height || Math.abs(width - height) <= 1) return;
-
-                        isCorrectingPipSize = true;
-                        const size = Math.max(width, height);
-
-                        try {
-                            pipWindow.resizeTo(size, size);
-                        } finally {
-                            setTimeout(() => {
-                                isCorrectingPipSize = false;
-                            }, 100);
-                        }
-                    };
-
-                    pipWindow.addEventListener('resize', keepPipSquare);
 
                     // PiP側は時計だけを全面表示
                     pipWindow.document.body.style.margin = '0';
@@ -287,24 +264,41 @@
                     const docCanvas = pipWindow.document.createElement('canvas');
                     docCanvas.width = 400;
                     docCanvas.height = 400;
-                    docCanvas.style.width = '100%';
-                    docCanvas.style.height = '100%';
                     docCanvas.style.display = 'block';
+                    docCanvas.style.flex = '0 0 auto';
                     pipWindow.document.body.appendChild(docCanvas);
 
                     const docContext = docCanvas.getContext('2d');
                     const docRadius = docCanvas.width / 2;
                     docContext.translate(docRadius, docRadius);
 
+                    // PiPウィンドウの短辺に合わせて、時計表示を常に正方形で中央配置する。
+                    const fitDocumentPipClock = () => {
+                        const size = Math.max(
+                            1,
+                            Math.min(
+                                pipWindow.document.documentElement.clientWidth,
+                                pipWindow.document.documentElement.clientHeight
+                            )
+                        );
+
+                        docCanvas.style.width = size + 'px';
+                        docCanvas.style.height = size + 'px';
+                    };
+
                     const updateDocumentPipClock = () => {
                         drawClock(docContext, docRadius);
                     };
 
+                    fitDocumentPipClock();
                     updateDocumentPipClock();
+
+                    pipWindow.addEventListener('resize', fitDocumentPipClock);
                     const documentPipTimer = setInterval(updateDocumentPipClock, 50);
 
                     pipWindow.addEventListener('pagehide', () => {
                         clearInterval(documentPipTimer);
+                        pipWindow.removeEventListener('resize', fitDocumentPipClock);
                     }, { once: true });
 
                     return;
